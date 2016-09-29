@@ -3347,9 +3347,8 @@ that the result can be refined with further calls with mode==GC_INIT_WITH_MASK o
 mode==GC_EVAL .
 @param mode Operation mode that could be one of the cv::GrabCutModes
  */
-CV_EXPORTS_W void grabCut( InputArray img, InputOutputArray mask, Rect rect,
-                           InputOutputArray bgdModel, InputOutputArray fgdModel,
-                           int iterCount, int mode = GC_EVAL );
+CV_EXPORTS_W void grabCut(InputArray _img, InputOutputArray _mask, InputOutputArray _gmm, Rect rect1, Rect rect2,
+	InputOutputArray _bgdModel, InputOutputArray _fgdModel, int iterCount, int mode, double gamma);
 
 /** @example distrans.cpp
 An example on using the distance transform\
