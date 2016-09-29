@@ -1,3 +1,43 @@
+/*M///////////////////////////////////////////////////////////////////////////////////////
+//
+//  IMPORTANT: READ BEFORE DOWNLOADING, COPYING, INSTALLING OR USING.
+//
+//  By downloading, copying, installing or using the software you agree to this license.
+//  If you do not agree to this license, do not download, install,
+//  copy or use the software.
+//
+//
+//                        Intel License Agreement
+//                For Open Source Computer Vision Library
+//
+// Copyright (C) 2000, Intel Corporation, all rights reserved.
+// Third party copyrights are property of their respective owners.
+//
+// Redistribution and use in source and binary forms, with or without modification,
+// are permitted provided that the following conditions are met:
+//
+//   * Redistribution's of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//   * Redistribution's in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//   * The name of Intel Corporation may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+//
+// This software is provided by the copyright holders and contributors "as is" and
+// any express or implied warranties, including, but not limited to, the implied
+// warranties of merchantability and fitness for a particular purpose are disclaimed.
+// In no event shall the Intel Corporation or contributors be liable for any direct,
+// indirect, incidental, special, exemplary, or consequential damages
+// (including, but not limited to, procurement of substitute goods or services;
+// loss of use, data, or profits; or business interruption) however caused
+// and on any theory of liability, whether in contract, strict liability,
+// or tort (including negligence or otherwise) arising in any way out of
+// the use of this software, even if advised of the possibility of such damage.
+//
+//M*/
 
 #include "precomp.hpp"
 #include "gcgraph.hpp"
@@ -11,14 +51,13 @@ This is implementation of image segmentation algorithm GrabCut described in
 Carsten Rother, Vladimir Kolmogorov, Andrew Blake.
  */
 
-
 /*
  GMM - Gaussian Mixture Model
 */
 class GMM
 {
 public:
-    static const int componentsCount = 2;
+    static const int componentsCount = 5;
 
     GMM( Mat& _model );
     double operator()( const Vec3d color ) const;
@@ -196,7 +235,7 @@ static double calcBeta( const Mat& img )
     double beta = 0;
     for( int y = 0; y < img.rows; y++ )
     {
-        for( int x = 0; x < img.cols; x++ )	
+        for( int x = 0; x < img.cols; x++ )
         {
             Vec3d color = img.at<Vec3b>(y,x);
             if( x>0 ) // left
@@ -284,8 +323,8 @@ static void checkMask( const Mat& img, const Mat& mask )
 {
     if( mask.empty() )
         CV_Error( CV_StsBadArg, "mask is empty" );
-    //if( mask.type() != CV_8UC1 )
-        //CV_Error( CV_StsBadArg, "mask must have CV_8UC1 type" );
+    if( mask.type() != CV_8UC1 )
+        CV_Error( CV_StsBadArg, "mask must have CV_8UC1 type" );
     if( mask.cols != img.cols || mask.rows != img.rows )
         CV_Error( CV_StsBadArg, "mask must have as many rows and cols as img" );
     for( int y = 0; y < mask.rows; y++ )
@@ -294,7 +333,7 @@ static void checkMask( const Mat& img, const Mat& mask )
         {
             uchar val = mask.at<uchar>(y,x);
             if( val!=GC_BGD && val!=GC_FGD && val!=GC_PR_BGD && val!=GC_PR_FGD )
-                CV_Error( CV_StsBadArg, "mask element value must be equel"
+                CV_Error( CV_StsBadArg, "mask element value must be equal "
                     "GC_BGD or GC_FGD or GC_PR_BGD or GC_PR_FGD" );
         }
     }
@@ -303,35 +342,17 @@ static void checkMask( const Mat& img, const Mat& mask )
 /*
   Initialize mask using rectangular.
 */
-static void initMaskWithRect( Mat& mask, Size imgSize, Rect rect1, Rect rect2 )
+static void initMaskWithRect( Mat& mask, Size imgSize, Rect rect )
 {
     mask.create( imgSize, CV_8UC1 );
-	//mask.create(imgSize, CV_16UC1);
     mask.setTo( GC_BGD );
 
-    rect1.x = std::max(0, rect1.x);
-    rect1.y = std::max(0, rect1.y);
-    rect1.width = std::min(rect1.width, imgSize.width-rect1.x);
-    rect1.height = std::min(rect1.height, imgSize.height-rect1.y);
+    rect.x = std::max(0, rect.x);
+    rect.y = std::max(0, rect.y);
+    rect.width = std::min(rect.width, imgSize.width-rect.x);
+    rect.height = std::min(rect.height, imgSize.height-rect.y);
 
-	rect2.x = std::max(0, rect2.x);
-	rect2.y = std::max(0, rect2.y);
-	rect2.width = std::min(rect2.width, imgSize.width - rect2.x);
-	rect2.height = std::min(rect2.height, imgSize.height - rect2.y);
-
-    (mask(rect1)).setTo( Scalar(GC_PR_FGD) );
-	(mask(rect2)).setTo(Scalar(GC_PR_FGD));
-
-	Mat distance, fgd_distance;
-	distanceTransform(mask, distance, CV_DIST_L1, 3);
-	normalize(distance, distance, 0., 1., NORM_MINMAX);
-	threshold(distance, fgd_distance, .8, 1.0, CV_THRESH_BINARY);
-	normalize(fgd_distance, fgd_distance, 0, 255, NORM_MINMAX);
-	fgd_distance.convertTo(fgd_distance, CV_8UC1);
-	mask.setTo(Scalar(GC_FGD), fgd_distance);
-
-	Mat cp_mask;
-	normalize(mask, cp_mask, 0, 255, NORM_MINMAX);
+    (mask(rect)).setTo( Scalar(GC_PR_FGD) );
 }
 
 /*
@@ -430,13 +451,6 @@ static void constructGCGraph( const Mat& img, const Mat& mask, const GMM& bgdGMM
         edgeCount = 2*(4*img.cols*img.rows - 3*(img.cols + img.rows) + 2);
     graph.create(vtxCount, edgeCount);
     Point p;
-
-	//Mat distance, fgd_distance, binMask;
-	////binMask = mask & 1;
-	//distanceTransform(mask, distance, CV_DIST_L1, 3);
-	//normalize(distance, distance, 0., 1., NORM_MINMAX);
-	//threshold(distance, fgd_distance, .7, 0, CV_THRESH_TOZERO);
-
     for( p.y = 0; p.y < img.rows; p.y++ )
     {
         for( p.x = 0; p.x < img.cols; p.x++)
@@ -449,10 +463,8 @@ static void constructGCGraph( const Mat& img, const Mat& mask, const GMM& bgdGMM
             double fromSource, toSink;
             if( mask.at<uchar>(p) == GC_PR_BGD || mask.at<uchar>(p) == GC_PR_FGD )
             {
-                //fromSource = - log( bgdGMM(color) * (1 - distance.at<float>(p)) );
-                //toSink = - log( fgdGMM(color) * distance.at<float>(p) );
-				fromSource = -log(bgdGMM(color));
-				toSink = -log(fgdGMM(color));
+                fromSource = -log( bgdGMM(color) );
+                toSink = -log( fgdGMM(color) );
             }
             else if( mask.at<uchar>(p) == GC_BGD )
             {
@@ -513,21 +525,21 @@ static void estimateSegmentation( GCGraph<double>& graph, Mat& mask )
     }
 }
 
-void cv::grabCut( InputArray _img, InputOutputArray _mask, InputOutputArray _gmm, Rect rect1, Rect rect2,
+void cv::grabCut( InputArray _img, InputOutputArray _mask, Rect rect,
                   InputOutputArray _bgdModel, InputOutputArray _fgdModel,
-                  int iterCount, int mode, double gamma )
+                  int iterCount, int mode )
 {
+    CV_INSTRUMENT_REGION()
+
     Mat img = _img.getMat();
     Mat& mask = _mask.getMatRef();
-	Mat& gmm = _gmm.getMatRef();
     Mat& bgdModel = _bgdModel.getMatRef();
     Mat& fgdModel = _fgdModel.getMatRef();
-	Mat rect_mask;
 
     if( img.empty() )
         CV_Error( CV_StsBadArg, "image is empty" );
-    //if( img.type() != CV_8UC3 )
-        //CV_Error( CV_StsBadArg, "image must have CV_8UC3 type" );
+    if( img.type() != CV_8UC3 )
+        CV_Error( CV_StsBadArg, "image must have CV_8UC3 type" );
 
     GMM bgdGMM( bgdModel ), fgdGMM( fgdModel );
     Mat compIdxs( img.size(), CV_32SC1 );
@@ -535,25 +547,19 @@ void cv::grabCut( InputArray _img, InputOutputArray _mask, InputOutputArray _gmm
     if( mode == GC_INIT_WITH_RECT || mode == GC_INIT_WITH_MASK )
     {
         if( mode == GC_INIT_WITH_RECT )
-            initMaskWithRect( mask, img.size(), rect1, rect2 );
-		else // flag == GC_INIT_WITH_MASK
-			checkMask(img, mask);
+            initMaskWithRect( mask, img.size(), rect );
+        else // flag == GC_INIT_WITH_MASK
+            checkMask( img, mask );
         initGMMs( img, mask, bgdGMM, fgdGMM );
     }
-	
+
     if( iterCount <= 0)
         return;
 
-	if (mode == GC_EVAL)
-	{
-		checkMask(img, mask);
-		initMaskWithRect(rect_mask, img.size(), rect1, rect2);//
-		Mat mask_new;//
-		mask.copyTo(mask_new, rect_mask);//
-		mask_new.copyTo(mask);//
-	}
+    if( mode == GC_EVAL )
+        checkMask( img, mask );
 
-    //const double gamma = 20;
+    const double gamma = 50;
     const double lambda = 9*gamma;
     const double beta = calcBeta( img );
 
@@ -568,11 +574,4 @@ void cv::grabCut( InputArray _img, InputOutputArray _mask, InputOutputArray _gmm
         constructGCGraph(img, mask, bgdGMM, fgdGMM, lambda, leftW, upleftW, upW, uprightW, graph );
         estimateSegmentation( graph, mask );
     }
-	compIdxs.copyTo(gmm);
-	//Mat cp_leftW, cp_upleftW, cp_upW, cp_uprightW, W;
-	//leftW.copyTo(cp_leftW); cp_leftW.convertTo(cp_leftW, CV_8U); normalize(cp_leftW, cp_leftW, 0, 255, NORM_MINMAX);
-	//upleftW.copyTo(cp_upleftW); cp_upleftW.convertTo(cp_upleftW, CV_8U); normalize(cp_upleftW, cp_upleftW, 0, 255, NORM_MINMAX);
-	//upW.copyTo(cp_upW); cp_upW.convertTo(cp_upW, CV_8U); normalize(cp_upW, cp_upW, 0, 255, NORM_MINMAX);
-	//uprightW.copyTo(cp_uprightW); cp_uprightW.convertTo(cp_uprightW, CV_8U); normalize(cp_uprightW, cp_uprightW, 0, 255, NORM_MINMAX);
-	//W = cp_leftW + cp_upleftW + cp_upW + cp_uprightW; normalize(W, W, 0, 255, NORM_MINMAX);
 }
